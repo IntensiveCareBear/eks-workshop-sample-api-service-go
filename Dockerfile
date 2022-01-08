@@ -1,18 +1,32 @@
-# This is a multi-stage build. First we are going to compile and then
-# create a small image for runtime.
-FROM golang:1.11.1 as builder
+FROM node:16-alpine3.13
 
-RUN mkdir -p /go/src/github.com/eks-workshop-sample-api-service-go
-WORKDIR /go/src/github.com/eks-workshop-sample-api-service-go
-RUN useradd -u 10001 app
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+ARG IMAGE_CREATE_DATE
+ARG IMAGE_VERSION
+ARG IMAGE_SOURCE_REVISION
 
-FROM scratch
+# Metadata as defined in OCI image spec annotations - https://github.com/opencontainers/image-spec/blob/master/annotations.md
+LABEL org.opencontainers.image.title="Hello Kubernetes!" \
+      org.opencontainers.image.description="Provides a demo app to deploy to a Kubernetes cluster. It displays a message, the name of the pod and details of the node it is deployed to." \
+      org.opencontainers.image.created=$IMAGE_CREATE_DATE \
+      org.opencontainers.image.version=$IMAGE_VERSION \
+      org.opencontainers.image.authors="Paul Bouwer" \
+      org.opencontainers.image.url="https://hub.docker.com/r/paulbouwer/hello-kubernetes/" \
+      org.opencontainers.image.documentation="https://github.com/paulbouwer/hello-kubernetes/README.md" \
+      org.opencontainers.image.vendor="Paul Bouwer" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/paulbouwer/hello-kubernetes.git" \
+      org.opencontainers.image.revision=$IMAGE_SOURCE_REVISION 
 
-COPY --from=builder /go/src/github.com/eks-workshop-sample-api-service-go/main /main
-COPY --from=builder /etc/passwd /etc/passwd
-USER app
+# Create app directory
+RUN mkdir -p /usr/src/app
+WORKDIR /usr/src/app
 
-EXPOSE 8080
-CMD ["/main"]
+# Install app dependencies
+COPY package.json /usr/src/app/
+RUN npm install
+
+# Bundle app source
+COPY . /usr/src/app
+
+USER node
+CMD [ "npm", "start" ]
